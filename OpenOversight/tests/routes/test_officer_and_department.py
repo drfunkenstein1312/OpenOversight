@@ -1229,7 +1229,7 @@ def test_admin_can_upload_photos_of_dept_officers(mockdata, client, session, tes
 
         crop_mock = MagicMock(return_value=Image.query.first())
         upload_mock = MagicMock(return_value=Image.query.first())
-        with patch('OpenOversight.app.main.views.upload_image_to_s3_and_store_in_db', upload_mock):
+        with patch('OpenOversight.app.main.views.upload_image_and_store_in_db', upload_mock):
             with patch('OpenOversight.app.main.views.crop_image', crop_mock):
                 rv = client.post(
                     url_for('main.upload', department_id=department.id, officer_id=officer.id),
@@ -1252,7 +1252,7 @@ def test_upload_photo_sends_500_on_s3_error(mockdata, client, session, test_png_
         mock = MagicMock(return_value=None)
         officer = department.officers[0]
         officer_face_count = officer.face.count()
-        with patch('OpenOversight.app.main.views.upload_image_to_s3_and_store_in_db', mock):
+        with patch('OpenOversight.app.main.views.upload_image_and_store_in_db', mock):
             rv = client.post(
                 url_for('main.upload', department_id=department.id, officer_id=officer.id),
                 content_type='multipart/form-data',
@@ -1306,7 +1306,7 @@ def test_ac_can_upload_photos_of_dept_officers(mockdata, client, session, test_p
 
         crop_mock = MagicMock(return_value=Image.query.first())
         upload_mock = MagicMock(return_value=Image.query.first())
-        with patch('OpenOversight.app.main.views.upload_image_to_s3_and_store_in_db', upload_mock):
+        with patch('OpenOversight.app.main.views.upload_image_and_store_in_db', upload_mock):
             with patch('OpenOversight.app.main.views.crop_image', crop_mock):
                 rv = client.post(
                     url_for('main.upload', department_id=department.id, officer_id=officer.id),

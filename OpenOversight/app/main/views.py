@@ -22,7 +22,7 @@ from ..utils import (serve_image, compute_leaderboard_stats, get_random_image,
                      replace_list, create_note, set_dynamic_default, roster_lookup,
                      create_description, filter_by_form,
                      crop_image, create_incident, get_or_create, dept_choices,
-                     upload_image_to_s3_and_store_in_db)
+                     upload_image_and_store_in_db)
 
 
 from .forms import (FindOfficerForm, FindOfficerIDForm, AddUnitForm,
@@ -965,7 +965,7 @@ def upload(department_id, officer_id=None):
     file_to_upload = request.files['file']
     if not allowed_file(file_to_upload.filename):
         return jsonify(error="File type not allowed!"), 415
-    image = upload_image_to_s3_and_store_in_db(file_to_upload, current_user.get_id(), department_id=department_id)
+    image = upload_image_and_store_in_db(file_to_upload, current_user.get_id(), department_id=department_id)
 
     if image:
         db.session.add(image)

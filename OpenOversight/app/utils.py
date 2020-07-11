@@ -4,8 +4,11 @@ from urllib.request import urlopen
 from io import BytesIO
 
 import boto3
-from botocore.exceptions import ClientError
+# from botocore.exceptions import ClientError
 import botocore
+
+from google.cloud import storage
+
 import datetime
 import hashlib
 import os
@@ -224,6 +227,32 @@ def serve_image(filepath):
 
 def compute_hash(data_to_hash):
     return hashlib.sha256(data_to_hash).hexdigest()
+
+
+def upload_obj(file_obj, dest_filename):
+    if current_app.config['GCP_BUCKET_NAME'] is not None:
+        return upload_obj_to_gcp(file_obj, dest_filename)
+    else:
+        return upload_obj_to_s3(file_obj, dest_filename)
+
+
+def upload_obj_to_gcp(file_obj, dest_filename):
+    gcp_folder = dest_filename[0:2]
+    gcp_filename = dest_filename[2:]
+
+    file_ending = imghdr.what(None, h=file_obj.read())
+    file_obj.seek(0)
+    content_type = "image/%s" % file_ending
+    gcp_path = f'{gcp_folder}/{gcp_filename}'
+
+    client = storage.Client()
+    bucket_name = current_app.config['GCP_BUCKET_NAME']
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcp_path)
+    blob.upload_from_file(file_obj, content_type=content_type)
+
+    url = f'https://{bucket_name}.storage.googleapis.com/{gcp_path}'
+    return url
 
 
 def upload_obj_to_s3(file_obj, dest_filename):
@@ -486,10 +515,10 @@ def crop_image(image, crop_data=None, department_id=None):
     cropped_image_buf = BytesIO()
     pimage.save(cropped_image_buf, image_type)
 
-    return upload_image_to_s3_and_store_in_db(cropped_image_buf, current_user.get_id(), department_id)
+    return upload_image_and_store_in_db(cropped_image_buf, current_user.get_id(), department_id)
 
 
-def upload_image_to_s3_and_store_in_db(image_buf, user_id, department_id=None):
+def upload_image_and_store_in_db(image_buf, user_id, department_id=None):
     image_buf.seek(0)
     image_type = imghdr.what(image_buf)
     image_data = image_buf.read()
@@ -509,7 +538,7 @@ def upload_image_to_s3_and_store_in_db(image_buf, user_id, department_id=None):
         raise ValueError('Attempted to pass invalid data type: {}'.format(image_type))
     try:
         new_filename = '{}.{}'.format(hash_img, image_type)
-        url = upload_obj_to_s3(image_buf, new_filename)
+        url = upload_obj(image_buf, new_filename)
         new_image = Image(filepath=url, hash_img=hash_img,
                           date_image_inserted=datetime.datetime.now(),
                           department_id=department_id,
@@ -519,9 +548,9 @@ def upload_image_to_s3_and_store_in_db(image_buf, user_id, department_id=None):
         db.session.add(new_image)
         db.session.commit()
         return new_image
-    except ClientError:
+    except Exception:
         exception_type, value, full_tback = sys.exc_info()
-        current_app.logger.error('Error uploading to S3: {}'.format(
+        current_app.logger.error('Error uploading to image: {}'.format(
             ' '.join([str(exception_type), str(value),
                       format_exc()])
         ))

@@ -34,6 +34,8 @@ class BaseConfig(object):
     AWS_DEFAULT_REGION = os.environ.get('AWS_DEFAULT_REGION')
     S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
 
+    GCP_BUCKET_NAME = os.environ.get('GCP_BUCKET_NAME')
+
     # Upload Settings
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024
     ALLOWED_EXTENSIONS = set(['jpeg', 'jpg', 'jpe', 'png', 'gif'])

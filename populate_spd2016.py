@@ -1,17 +1,17 @@
 import os
 
-# os.environ["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
+os.environ["SQLALCHEMY_DATABASE_URI"] = "postgres+psycopg2://postgres:okateLw8i4qGadn7@127.0.0.1:5433/postgres"
 import pandas as pd
 from OpenOversight.app import models
 from OpenOversight.app import create_app
 from OpenOversight.app.models import db
 
 
-app = create_app("development")
+app = create_app()
 ctx = app.app_context()
 ctx.push()
 db.app = app
-# db.create_all()
+db.create_all()
 session = db.session
 
 
@@ -144,7 +144,11 @@ for i, row in Q.iterrows():
     last_name, first_name = last_name.strip(), first_name.strip()
     first_name_parsed = first_name.split()
     maybe_middle = first_name_parsed[-1]
-    if len(maybe_middle) == 2 and maybe_middle[1] == ".":
+
+    if len(maybe_middle) == 1:
+        middle_initial = maybe_middle
+        first_name = " ".join(first_name_parsed[:-1])
+    elif len(maybe_middle) == 2 and maybe_middle[1] == ".":
         middle_initial = maybe_middle[0]
         first_name = " ".join(first_name_parsed[:-1])
     else:
