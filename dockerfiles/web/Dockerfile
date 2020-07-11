@@ -31,7 +31,7 @@ RUN test "${DOCKER_BUILD_ENV}" = production || pip3 install --no-cache-dir -r de
 COPY package.json /usr/src/app/
 RUN yarn
 
-COPY create_db.py test_data.py /usr/src/app/
+COPY create_db.py populate_spd2016.py /usr/src/app/
 EXPOSE 3000
 
 ENV PATH="/usr/src/app/geckodriver:${PATH}"

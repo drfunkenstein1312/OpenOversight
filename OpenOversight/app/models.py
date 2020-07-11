@@ -177,7 +177,7 @@ class Assignment(db.Model):
     star_no = db.Column(db.String(120), index=True, unique=False, nullable=True)
     job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False)
     job = db.relationship('Job')
-    unit_id = db.Column(db.Integer, db.ForeignKey('unit_types.id'), nullable=True)
+    unit_id = db.Column(db.String(120), db.ForeignKey('unit_types.id'), nullable=True)
     unit = db.relationship('Unit')
     star_date = db.Column(db.Date, index=True, unique=False, nullable=True)
     resign_date = db.Column(db.Date, index=True, unique=False, nullable=True)
@@ -190,7 +190,7 @@ class Assignment(db.Model):
 class Unit(db.Model):
     __tablename__ = 'unit_types'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(120), primary_key=True)
     descrip = db.Column(db.String(120), index=True, unique=False)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
     department = db.relationship('Department', backref='unit_types')
