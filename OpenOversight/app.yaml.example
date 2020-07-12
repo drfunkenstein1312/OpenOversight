@@ -1,0 +1,5 @@
+runtime: python38
+entrypoint: gunicorn -b :$PORT app:app
+env_variables:
+    SQLALCHEMY_DATABASE_URI: "postgres+psycopg2://postgres:PASSWORD@/postgres?host=/cloudsql/openoversight:us-west1:production"
+    GCP_BUCKET_NAME: "spdwatch-images"
