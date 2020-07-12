@@ -15,7 +15,7 @@
 
    <div class="header">
       <h3>What happens when I submit a photograph?</h3>
-      <p>The next step after a photograph of an officer has been submitted is to match it to the correct badge number, name, and OpenOversight ID (a unique identifier in our system). Volunteers <a href="https://openoversight.com/label">sort through submitted images</a> by first confirming that officers are present in each photograph, and then by matching each photograph to the officer it depicts.</p>
+      <p>The next step after a photograph of an officer has been submitted is to match it to the correct badge number, name, and OpenOversight ID (a unique identifier in our system). Volunteers <a href="/label">sort through submitted images</a> by first confirming that officers are present in each photograph, and then by matching each photograph to the officer it depicts.</p>
       {% if not current_user.get_id() %}
         <p>Please consider creating an account and logging in so that we can keep track of the images you've submitted and contact you with any questions.</p>
       {% else %}
@@ -75,10 +75,10 @@
    </script>
 </div>
 
-<div class="container">
+<!-- <div class="container">
    <h3>High Security Submissions</h3>
    <p>We do not log unique identifying information of visitors to our website, but if you have privacy concerns in submitting photographs, we recommend using <a href="https://www.torproject.org/projects/torbrowser.html.en">Tor Browser.</a> For high security submissions of photos or videos, you can use an anonymous dropbox called SecureDrop (launch instructions below). All files that we receive through SecureDrop are <a href="https://mat.boum.org/">scrubbed of metadata.</a></p>
    <a href="https://lucyparsonslabs.com/securedrop"><img src="{{url_for('static', filename='images/securedrop.png')}}"/> Launch SecureDrop Instructions</a>
-</div>
+</div> -->
 
 {% endblock %}

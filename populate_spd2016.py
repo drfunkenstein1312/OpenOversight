@@ -83,6 +83,9 @@ def add_officer(session, last_name, first_name, middle_initial, dept):
 SPD = maybe_add_dept(
     session, name="Seattle Police Department", short_name="SPD"
 )
+# KCSD = maybe_add_dept(
+#     session, name="King County Sheriff's Department", short_name="KCSD"
+# )
 
 # Q = pd.read_csv("/usr/src/app/2016-SPD-roster.csv")
 Q = pd.read_excel(
