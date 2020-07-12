@@ -19,3 +19,4 @@ us==1.0
 future==0.18.2
 email-validator==1.0.5
 xlrd==1.2.0
+google-cloud-storage
