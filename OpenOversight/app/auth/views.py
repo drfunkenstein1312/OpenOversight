@@ -86,6 +86,7 @@ def confirm(token):
     if current_user.confirmed:
         return redirect(url_for('main.index'))
     if current_user.confirm(token):
+        db.session.commit()
         admins = User.query.filter_by(is_administrator=True).all()
         for admin in admins:
             send_email(admin.email, 'New user confirmed',
