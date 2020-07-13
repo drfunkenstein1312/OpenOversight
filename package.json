@@ -1,7 +1,7 @@
 {
-  "name": "OpenOversight",
+  "name": "openoversightseattle",
   "version": "1.0.0",
-  "repository": "https://github.com/lucyparsons/OpenOversight",
+  "repository": "https://github.com/drfunkenstein1312/OpenOversight",
   "scripts": {
     "build": "node-sass --build --recursive OpenOversight/app/static/scss/index.scss -o OpenOversight/app/static/dist",
     "watch": "node-sass --watch --recursive OpenOversight/app/static/scss/index.scss -o OpenOversight/app/static/dist"

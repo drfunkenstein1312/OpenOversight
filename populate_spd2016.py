@@ -1,6 +1,6 @@
 import os
 
-os.environ["SQLALCHEMY_DATABASE_URI"] = "postgres+psycopg2://postgres:okateLw8i4qGadn7@127.0.0.1:5433/postgres"
+os.environ["SQLALCHEMY_DATABASE_URI"] = "postgres+psycopg2://openoversight:terriblepassword@openoversight_postgres_1:5432/postgres"
 import pandas as pd
 from OpenOversight.app import models
 from OpenOversight.app import create_app
@@ -83,6 +83,9 @@ def add_officer(session, last_name, first_name, middle_initial, dept):
 SPD = maybe_add_dept(
     session, name="Seattle Police Department", short_name="SPD"
 )
+# KCSD = maybe_add_dept(
+#     session, name="King County Sheriff's Department", short_name="KCSD"
+# )
 
 # Q = pd.read_csv("/usr/src/app/2016-SPD-roster.csv")
 Q = pd.read_excel(
