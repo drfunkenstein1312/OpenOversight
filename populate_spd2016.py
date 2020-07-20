@@ -4,15 +4,26 @@ os.environ["SQLALCHEMY_DATABASE_URI"] = "postgres+psycopg2://openoversight:terri
 import pandas as pd
 from OpenOversight.app import models
 from OpenOversight.app import create_app
-from OpenOversight.app.models import db
-
 
 app = create_app()
-ctx = app.app_context()
-ctx.push()
-db.app = app
+ctx = app.app_context().push()
+db = app.db
+
 db.create_all()
 session = db.session
+
+def maybe_add_user(session, username, password, email, admin=False, confirmed=True):
+    q = session.query(models.User).filter_by(username=username).all()
+    if not q:
+        user = models.User(username=username, password=password, email=email, is_administrator=admin)
+        user.confirm(user.generate_confirmation_token())
+        session.add(user)
+        session.commit()
+    else:
+        assert len(q) == 1
+        user = q.pop()
+
+    return user
 
 
 def maybe_add_dept(session, name, short_name):
@@ -78,6 +89,9 @@ def add_officer(session, last_name, first_name, middle_initial, dept):
     session.commit()
 
     return officer
+
+
+admin = maybe_add_user(session, username='admin', password='admin', email='example@example.com', admin=True, confirmed=True)
 
 
 SPD = maybe_add_dept(

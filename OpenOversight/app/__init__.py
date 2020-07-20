@@ -31,6 +31,8 @@ def create_app(config_name='default'):
     config[config_name].init_app(app)
     from .models import db  # noqa
 
+    app.db = db
+
     bootstrap.init_app(app)
     mail.init_app(app)
     db.init_app(app)

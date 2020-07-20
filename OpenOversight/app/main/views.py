@@ -39,6 +39,9 @@ from ..auth.forms import LoginForm
 from ..auth.utils import admin_required, ac_or_admin_required
 from sqlalchemy.orm import contains_eager, joinedload
 
+from sqlalchemy_continuum import version_class
+
+
 # Ensure the file is read/write by the creator only
 SAVED_UMASK = os.umask(0o077)
 
@@ -1007,6 +1010,25 @@ def server_shutdown():      # pragma: no cover
     return 'Shutting down...'
 
 
+@main.route('/incident_version')
+def incident_version():
+    if request.args.get('page'):
+        page = int(request.args.get('page'))
+    else:
+        page = 1
+
+    incident_id = int(request.args.get('incident_id'))
+
+    IncidentVersion = version_class(Incident)
+    objects = IncidentVersion.query.filter_by(id=incident_id).order_by(IncidentVersion.transaction_id.desc())
+
+    # return str([len(x.officers) for x in objects.all()])
+
+    objects = objects.paginate(page=page)
+
+    return render_template('incident_version_list.html', objects=objects, url='main.incident_version')
+
+
 class IncidentApi(ModelView):
     model = Incident
     model_name = 'incident'
@@ -1126,6 +1148,10 @@ main.add_url_rule(
     methods=['GET', 'POST'])
 main.add_url_rule(
     '/incidents/<int:obj_id>/delete',
+    view_func=incident_view,
+    methods=['GET', 'POST'])
+main.add_url_rule(
+    '/incidents/<int:obj_id>/revert',
     view_func=incident_view,
     methods=['GET', 'POST'])
 

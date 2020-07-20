@@ -5,6 +5,7 @@ from flask_login import login_required, current_user
 from ..auth.utils import ac_or_admin_required
 from ..models import db
 from ..utils import add_department_query, set_dynamic_default
+from sqlalchemy_continuum import version_class
 
 
 class ModelView(MethodView):
@@ -33,8 +34,26 @@ class ModelView(MethodView):
 
             return render_template('{}_list.html'.format(self.model_name), objects=objects, url='main.{}_api'.format(self.model_name))
         else:
-            obj = self.model.query.get_or_404(obj_id)
-            return render_template('{}_detail.html'.format(self.model_name), obj=obj, current_user=current_user)
+            latest_version = self.model.query.get_or_404(obj_id)
+
+            if request.args.get('version'):
+                version = int(request.args.get('version'))
+                obj = version_class(self.model).query.get_or_404((obj_id, version))
+                current_version = latest_version.versions[-1] == obj
+            else:
+                obj = latest_version
+                current_version = True
+
+            return render_template('{}_detail.html'.format(self.model_name), obj=obj, current_user=current_user, current_version=current_version)
+
+    @login_required
+    @ac_or_admin_required
+    def revert(self, obj_id):
+        version = int(request.args.get('version'))
+        obj = version_class(self.model).query.get_or_404((obj_id, version))
+        obj.revert()
+        db.session.commit()
+        return self.get_redirect_url(obj_id=obj_id)
 
     @login_required
     @ac_or_admin_required
@@ -136,7 +155,7 @@ class ModelView(MethodView):
     def dispatch_request(self, *args, **kwargs):
         # isolate the method at the end of the url
         end_of_url = request.url.split('/')[-1].split('?')[0]
-        endings = ['edit', 'new', 'delete']
+        endings = ['edit', 'new', 'delete', 'revert']
         meth = None
         for ending in endings:
             if end_of_url == ending:

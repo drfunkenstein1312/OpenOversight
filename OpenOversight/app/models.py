@@ -2,8 +2,9 @@ import re
 from urllib.parse import urlparse
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import validates
+from sqlalchemy.orm import validates, configure_mappers
 from sqlalchemy import UniqueConstraint
+from flask_continuum import VersioningMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import BadSignature, BadData
@@ -12,8 +13,16 @@ from flask import current_app
 from .validators import state_validator
 from . import login_manager
 
-db = SQLAlchemy()
+from sqlalchemy_continuum.plugins import FlaskPlugin
+from sqlalchemy_continuum import make_versioned
 
+from .plugins import VersionInheritancePlugin
+
+
+make_versioned(plugins=[FlaskPlugin(), VersionInheritancePlugin()])
+
+
+db = SQLAlchemy()
 
 officer_links = db.Table('officer_links',
                          db.Column('officer_id', db.Integer, db.ForeignKey('officers.id'), primary_key=True),
@@ -64,6 +73,7 @@ class Job(db.Model):
 
 class Note(db.Model):
     __tablename__ = 'notes'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     text_contents = db.Column(db.Text())
@@ -77,6 +87,7 @@ class Note(db.Model):
 
 class Description(db.Model):
     __tablename__ = 'descriptions'
+    __versioned__ = {}
 
     creator = db.relationship('User', backref='descriptions')
     officer = db.relationship('Officer', back_populates='descriptions')
@@ -88,8 +99,9 @@ class Description(db.Model):
     date_updated = db.Column(db.DateTime)
 
 
-class Officer(db.Model):
+class Officer(db.Model, VersioningMixin):
     __tablename__ = 'officers'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     last_name = db.Column(db.String(120), index=True, unique=False)
@@ -155,6 +167,7 @@ class Officer(db.Model):
 
 class Salary(db.Model):
     __tablename__ = 'salaries'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     officer_id = db.Column(db.Integer, db.ForeignKey('officers.id', ondelete='CASCADE'))
@@ -170,6 +183,7 @@ class Salary(db.Model):
 
 class Assignment(db.Model):
     __tablename__ = 'assignments'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     officer_id = db.Column(db.Integer, db.ForeignKey('officers.id', ondelete='CASCADE'))
@@ -189,6 +203,7 @@ class Assignment(db.Model):
 
 class Unit(db.Model):
     __tablename__ = 'unit_types'
+    __versioned__ = {}
 
     id = db.Column(db.String(120), primary_key=True)
     descrip = db.Column(db.String(120), index=True, unique=False)
@@ -201,6 +216,7 @@ class Unit(db.Model):
 
 class Face(db.Model):
     __tablename__ = 'faces'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     officer_id = db.Column(db.Integer, db.ForeignKey('officers.id'))
@@ -336,6 +352,7 @@ class LicensePlate(db.Model):
 
 class Link(db.Model):
     __tablename__ = 'links'
+    __versioned__ = {}
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), index=True)
@@ -356,6 +373,7 @@ class Link(db.Model):
 
 
 class Incident(db.Model):
+    __versioned__ = {}
     __tablename__ = 'incidents'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -470,3 +488,6 @@ class User(UserMixin, db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+configure_mappers()

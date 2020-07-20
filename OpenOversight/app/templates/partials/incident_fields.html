@@ -84,6 +84,12 @@
 					<td><a href="{{ url_for('main.profile', username=incident.last_updated_by.username)}}">{{ incident.last_updated_by.username }}</a></td>
 				</tr>
 			{% endif %}
+			{% if incident.transaction_id %}
+			<tr>
+				<td><strong>Version</strong></td>
+				<td>{{incident.transaction_id}}</td>
+			</tr>
+			{% endif %}
 		{% endif %}
 	</tbody>
 </table>
