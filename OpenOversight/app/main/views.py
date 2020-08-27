@@ -5,16 +5,15 @@ import os
 import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
-from sqlalchemy.sql import text
 import sys
 from traceback import format_exc
 
 from flask import (abort, render_template, request, redirect, url_for,
-                   flash, current_app, jsonify, Response)
+                   flash, current_app, jsonify, Response, Markup)
 from flask_login import current_user, login_required, login_user
 
 from . import main
-from .. import limiter
+from .. import limiter, sitemap
 from ..utils import (serve_image, compute_leaderboard_stats, get_random_image,
                      allowed_file, add_new_assignment, edit_existing_assignment,
                      add_officer_profile, edit_officer_profile,
@@ -45,23 +44,39 @@ from sqlalchemy_continuum import version_class
 # Ensure the file is read/write by the creator only
 SAVED_UMASK = os.umask(0o077)
 
+sitemap_endpoints = []
+
+
+def sitemap_include(view):
+    sitemap_endpoints.append(view.__name__)
+    return view
+
+
+@sitemap.register_generator
+def static_routes():
+    for endpoint in sitemap_endpoints:
+        yield 'main.' + endpoint, {}
+
 
 def redirect_url(default='index'):
     return request.args.get('next') or request.referrer or url_for(default)
 
 
+@sitemap_include
 @main.route('/')
 @main.route('/index')
 def index():
     return render_template('index.html')
 
 
+@sitemap_include
 @main.route('/browse', methods=['GET'])
 def browse():
     departments = Department.query.filter(Department.officers.any())
     return render_template('browse.html', departments=departments)
 
 
+@sitemap_include
 @main.route('/find', methods=['GET', 'POST'])
 def get_officer():
     jsloads = ['js/find_officer.js']
@@ -79,12 +94,15 @@ def get_officer():
             race=form.data['race'] if form.data['race'] != 'Not Sure' else None,
             gender=form.data['gender'] if form.data['gender'] != 'Not Sure' else None,
             rank=form.data['rank'] if form.data['rank'] != 'Not Sure' else None,
+            unit=form.data['unit'] if form.data['unit'] != 'Not Sure' else None,
             min_age=form.data['min_age'],
             max_age=form.data['max_age'],
             name=form.data['name'],
             badge=form.data['badge'],
             unique_internal_identifier=form.data['unique_internal_identifier']),
             code=302)
+    else:
+        current_app.logger.info(form.errors)
     return render_template('input_find_officer.html', form=form, depts_dict=depts_dict, jsloads=jsloads)
 
 
@@ -93,9 +111,12 @@ def get_ooid():
     form = FindOfficerIDForm()
     if form.validate_on_submit():
         return redirect(url_for('main.get_tagger_gallery'), code=307)
+    else:
+        current_app.logger.info(form.errors)
     return render_template('input_find_ooid.html', form=form)
 
 
+@sitemap_include
 @main.route('/label', methods=['GET', 'POST'])
 def get_started_labeling():
     form = LoginForm()
@@ -105,6 +126,8 @@ def get_started_labeling():
             login_user(user, form.remember_me.data)
             return redirect(request.args.get('next') or url_for('main.index'))
         flash('Invalid username or password.')
+    else:
+        current_app.logger.info(form.errors)
     departments = Department.query.all()
     return render_template('label_data.html', departments=departments, form=form)
 
@@ -125,6 +148,7 @@ def sort_images(department_id):
                            department_id=department_id)
 
 
+@sitemap_include
 @main.route('/tutorial')
 def get_tutorial():
     return render_template('tutorial.html')
@@ -163,7 +187,7 @@ def officer_profile(officer_id):
                               .all()
 
     try:
-        faces = Face.query.filter_by(officer_id=officer_id).all()
+        faces = Face.query.filter_by(officer_id=officer_id).order_by(Face.featured.desc()).all()
         assignments = Assignment.query.filter_by(officer_id=officer_id).all()
         face_paths = []
         for face in faces:
@@ -179,6 +203,12 @@ def officer_profile(officer_id):
                            faces=faces, assignments=assignments, form=form)
 
 
+@sitemap.register_generator
+def sitemap_officers():
+    for officer in Officer.query.all():
+        yield 'main.officer_profile', {'officer_id': officer.id}
+
+
 @main.route('/officer/<int:officer_id>/assignment/new', methods=['POST'])
 @ac_or_admin_required
 def add_assignment(officer_id):
@@ -192,19 +222,20 @@ def add_assignment(officer_id):
         flash('Officer not found')
         abort(404)
 
-    if form.validate_on_submit() and (current_user.is_administrator or
-                                      (current_user.is_area_coordinator and
-                                       officer.department_id == current_user.ac_department_id)):
-        try:
-            add_new_assignment(officer_id, form)
-            flash('Added new assignment!')
-        except IntegrityError:
-            flash('Assignment already exists')
-        return redirect(url_for('main.officer_profile',
-                                officer_id=officer_id), code=302)
-    elif current_user.is_area_coordinator and not officer.department_id == current_user.ac_department_id:
-        abort(403)
-
+    if form.validate_on_submit():
+        if (current_user.is_administrator
+                or (current_user.is_area_coordinator and officer.department_id == current_user.ac_department_id)):
+            try:
+                add_new_assignment(officer_id, form)
+                flash('Added new assignment!')
+            except IntegrityError:
+                flash('Assignment already exists')
+            return redirect(url_for('main.officer_profile',
+                                    officer_id=officer_id), code=302)
+        elif current_user.is_area_coordinator and not officer.department_id == current_user.ac_department_id:
+            abort(403)
+    else:
+        current_app.logger.info(form.errors)
     return redirect(url_for('main.officer_profile', officer_id=officer_id))
 
 
@@ -233,6 +264,8 @@ def edit_assignment(officer_id, assignment_id):
         assignment = edit_existing_assignment(assignment, form)
         flash('Edited officer assignment ID {}'.format(assignment.id))
         return redirect(url_for('main.officer_profile', officer_id=officer_id))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('edit_assignment.html', form=form)
 
 
@@ -288,6 +321,8 @@ def edit_salary(officer_id, salary_id):
         db.session.commit()
         flash('Edited officer salary ID {}'.format(salary.id))
         return redirect(url_for('main.officer_profile', officer_id=officer_id))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('add_edit_salary.html', form=form, update=True)
 
 
@@ -391,6 +426,7 @@ def add_department():
             flash('Department {} already exists'.format(form.name.data))
         return redirect(url_for('main.get_started_labeling'))
     else:
+        current_app.logger.info(form.errors)
         return render_template('add_edit_department.html', form=form, jsloads=jsloads)
 
 
@@ -402,6 +438,7 @@ def edit_department(department_id):
     department = Department.query.get_or_404(department_id)
     previous_name = department.name
     form = EditDepartmentForm(obj=department)
+    original_ranks = department.jobs
     if form.validate_on_submit():
         new_name = form.name.data
         if new_name != previous_name:
@@ -419,6 +456,23 @@ def edit_department(department_id):
                 if rank:
                     new_ranks.append((rank, order))
                     order += 1
+            updated_ranks = form.jobs.data
+            if len(updated_ranks) < len(original_ranks):
+                deleted_ranks = [rank for rank in original_ranks if rank.job_title not in updated_ranks]
+                if Assignment.query.filter(Assignment.job_id.in_([rank.id for rank in deleted_ranks])).count() == 0:
+                    for rank in deleted_ranks:
+                        db.session.delete(rank)
+                else:
+                    failed_deletions = []
+                    for rank in deleted_ranks:
+                        if Assignment.query.filter(Assignment.job_id.in_([rank.id])).count() != 0:
+                            failed_deletions.append(rank)
+                    for rank in failed_deletions:
+                        formatted_rank = rank.job_title.replace(" ", "+")
+                        link = '/department/{}?name=&badge=&unique_internal_identifier=&rank={}&min_age=16&max_age=100&submit=Submit'.format(department_id, formatted_rank)
+                        flash(Markup('You attempted to delete a rank, {}, that is in use by <a href={}>the linked officers</a>.'.format(rank, link)))
+                    return redirect(url_for('main.edit_department', department_id=department_id))
+
             for (new_rank, order) in new_ranks:
                 existing_rank = Job.query.filter_by(department_id=department_id, job_title=new_rank).one_or_none()
                 if existing_rank:
@@ -433,18 +487,16 @@ def edit_department(department_id):
                     ))
             db.session.commit()
 
-            # Prune any jobs from department that aren't referenced by any current officers
-            query = text("DELETE FROM jobs WHERE department_id = :department_id AND is_sworn_officer = False AND NOT EXISTS (SELECT 1 FROM assignments WHERE assignments.job_id = jobs.id)")
-            query = query.bindparams(department_id=department_id)
-            db.session.execute(query)
         flash('Department {} edited'.format(department.name))
         return redirect(url_for('main.list_officer', department_id=department.id))
     else:
+        current_app.logger.info(form.errors)
         return render_template('add_edit_department.html', form=form, update=True, jsloads=jsloads)
 
 
 @main.route('/department/<int:department_id>')
-def list_officer(department_id, page=1, race=[], gender=[], rank=[], min_age='16', max_age='100', name=None, badge=None, unique_internal_identifier=None):
+def list_officer(department_id, page=1, race=[], gender=[], rank=[], min_age='16', max_age='100', name=None,
+                 badge=None, unique_internal_identifier=None, unit=None):
     form = BrowseForm()
     form.rank.query = Job.query.filter_by(department_id=department_id, is_sworn_officer=True).order_by(Job.order.asc()).all()
     form_data = form.data
@@ -455,6 +507,7 @@ def list_officer(department_id, page=1, race=[], gender=[], rank=[], min_age='16
     form_data['max_age'] = max_age
     form_data['name'] = name
     form_data['badge'] = badge
+    form_data['unit'] = unit
     form_data['unique_internal_identifier'] = unique_internal_identifier
 
     OFFICERS_PER_PAGE = int(current_app.config['OFFICERS_PER_PAGE'])
@@ -473,6 +526,8 @@ def list_officer(department_id, page=1, race=[], gender=[], rank=[], min_age='16
         form_data['name'] = request.args.get('name')
     if request.args.get('badge'):
         form_data['badge'] = request.args.get('badge')
+    if request.args.get('unit') and request.args.get('unit') != 'Not Sure':
+        form_data['unit'] = int(request.args.get('unit'))
     if request.args.get('unique_internal_identifier'):
         form_data['unique_internal_identifier'] = request.args.get('unique_internal_identifier')
     if request.args.get('race') and all(race in [rc[0] for rc in RACE_CHOICES] for race in request.args.getlist('race')):
@@ -480,16 +535,22 @@ def list_officer(department_id, page=1, race=[], gender=[], rank=[], min_age='16
     if request.args.get('gender') and all(gender in [gc[0] for gc in GENDER_CHOICES] for gender in request.args.getlist('gender')):
         form_data['gender'] = request.args.getlist('gender')
 
+    unit_choices = [(unit.id, unit.descrip) for unit in Unit.query.filter_by(department_id=department_id).all()]
     rank_choices = [jc[0] for jc in db.session.query(Job.job_title, Job.order).filter_by(department_id=department_id, is_sworn_officer=True).order_by(Job.order).all()]
     if request.args.get('rank') and all(rank in rank_choices for rank in request.args.getlist('rank')):
         form_data['rank'] = request.args.getlist('rank')
 
     officers = filter_by_form(form_data, Officer.query, department_id).filter(Officer.department_id == department_id).order_by(Officer.last_name).paginate(page, OFFICERS_PER_PAGE, False)
+    for officer in officers.items:
+        officer_face = officer.face.order_by(Face.featured.desc()).first()
+        if officer_face:
+            officer.image = officer_face.image.filepath
 
     choices = {
         'race': RACE_CHOICES,
         'gender': GENDER_CHOICES,
-        'rank': [(rc, rc) for rc in rank_choices]
+        'rank': [(rc, rc) for rc in rank_choices],
+        'unit': [('Not Sure', 'Not Sure')] + unit_choices
     }
 
     return render_template(
@@ -547,6 +608,7 @@ def add_officer():
         flash('New Officer {} added to OpenOversight'.format(officer.last_name))
         return redirect(url_for('main.submit_officer_images', officer_id=officer.id))
     else:
+        current_app.logger.info(form.errors)
         return render_template('add_officer.html', form=form, jsloads=jsloads)
 
 
@@ -572,6 +634,7 @@ def edit_officer(officer_id):
         flash('Officer {} edited'.format(officer.last_name))
         return redirect(url_for('main.officer_profile', officer_id=officer.id))
     else:
+        current_app.logger.info(form.errors)
         return render_template('edit_officer.html', form=form, jsloads=jsloads)
 
 
@@ -591,6 +654,7 @@ def add_unit():
         flash('New unit {} added to OpenOversight'.format(unit.descrip))
         return redirect(url_for('main.get_started_labeling'))
     else:
+        current_app.logger.info(form.errors)
         return render_template('add_unit.html', form=form)
 
 
@@ -602,7 +666,7 @@ def delete_tag(tag_id):
 
     if not tag:
         flash('Tag not found')
-        return redirect(url_for('main.index'))
+        abort(404)
 
     if not current_user.is_administrator and current_user.is_area_coordinator:
         if current_user.ac_department_id != tag.officer.department_id:
@@ -620,6 +684,39 @@ def delete_tag(tag_id):
                       format_exc()])
         ))
     return redirect(url_for('main.index'))
+
+
+@main.route('/tag/set_featured/<int:tag_id>', methods=['POST'])
+@login_required
+@ac_or_admin_required
+def set_featured_tag(tag_id):
+    tag = Face.query.filter_by(id=tag_id).first()
+
+    if not tag:
+        flash('Tag not found')
+        abort(404)
+
+    if not current_user.is_administrator and current_user.is_area_coordinator:
+        if current_user.ac_department_id != tag.officer.department_id:
+            abort(403)
+
+    # Set featured=False on all other tags for the same officer
+    for face in Face.query.filter_by(officer_id=tag.officer_id).all():
+        face.featured = False
+    # Then set this tag as featured
+    tag.featured = True
+
+    try:
+        db.session.commit()
+        flash('Successfully set this tag as featured')
+    except:  # noqa
+        flash('Unknown error occurred')
+        exception_type, value, full_tback = sys.exc_info()
+        current_app.logger.error('Error setting featured tag: {}'.format(
+            ' '.join([str(exception_type), str(value),
+                      format_exc()])
+        ))
+    return redirect(url_for('main.officer_profile', officer_id=tag.officer_id))
 
 
 @main.route('/leaderboard')
@@ -642,7 +739,7 @@ def label_data(department_id=None, image_id=None):
         department = Department.query.filter_by(id=department_id).one()
         if image_id:
             image = Image.query.filter_by(id=image_id) \
-                               .filter_by(department_id=department_id).one()
+                               .filter_by(department_id=department_id).first()
         else:  # Get a random image from that department
             image_query = Image.query.filter_by(contains_cops=True) \
                                .filter_by(department_id=department_id) \
@@ -670,6 +767,8 @@ def label_data(department_id=None, image_id=None):
                          .filter(Face.original_image_id == form.image_id.data).first()
         if not officer_exists:
             flash('Invalid officer ID. Please select a valid OpenOversight ID!')
+        elif department and officer_exists.department_id != department_id:
+            flash('The officer is not in {}. Are you sure that is the correct OpenOversight ID?'.format(department.name))
         elif not existing_tag:
             left = form.dataX.data
             upper = form.dataY.data
@@ -696,6 +795,8 @@ def label_data(department_id=None, image_id=None):
                 flash('There was a problem saving this tag. Please try again later.')
         else:
             flash('Tag already exists between this officer and image! Tag not added.')
+    else:
+        current_app.logger.info(form.errors)
 
     return render_template('cop_face.html', form=form,
                            image=image, path=proper_path,
@@ -732,6 +833,7 @@ def get_tagger_gallery(page=1):
                                form=form,
                                form_data=form_data)
     else:
+        current_app.logger.info(form.errors)
         return redirect(url_for('main.get_ooid'), code=307)
 
 
@@ -745,6 +847,7 @@ def submit_complaint():
                            officer_image=request.args.get('officer_image'))
 
 
+@sitemap_include
 @main.route('/submit', methods=['GET', 'POST'])
 @limiter.limit('5/minute')
 def submit_data():
@@ -880,28 +983,29 @@ def download_dept_assignments_csv(department_id):
         abort(404)
 
     assignments = (db.session.query(Assignment)
-                   .join(Assignment.job)
-                   .options(joinedload(Assignment.baseofficer))
+                   .join(Assignment.baseofficer)
+                   .filter(Officer.department_id == department_id)
+                   .options(contains_eager(Assignment.baseofficer))
                    .options(joinedload(Assignment.unit))
-                   .options(contains_eager(Assignment.job))
-                   .filter_by(department_id=Job.department_id)
+                   .options(joinedload(Assignment.job))
                    )
 
     csv_output = io.StringIO()
-    csv_fieldnames = ["officer id", "officer unique identifier", "badge number", "job title", "start date", "end date", "unit"]
+    csv_fieldnames = ["id", "officer id", "officer unique identifier", "badge number", "job title", "start date", "end date", "unit id"]
     csv_writer = csv.DictWriter(csv_output, fieldnames=csv_fieldnames)
     csv_writer.writeheader()
 
     for assignment in assignments:
         officer = assignment.baseofficer
         record = {
+            "id": assignment.id,
             "officer id": assignment.officer_id,
             "officer unique identifier": officer and officer.unique_internal_identifier,
             "badge number": assignment.star_no,
-            "job title": check_output(assignment.job.job_title),
+            "job title": assignment.job and check_output(assignment.job.job_title),
             "start date": assignment.star_date,
             "end date": assignment.resign_date,
-            "unit": assignment.unit and assignment.unit.descrip,
+            "unit id": assignment.unit and assignment.unit.id,
         }
         csv_writer.writerow(record)
 
@@ -940,9 +1044,10 @@ def download_incidents_csv(department_id):
     return Response(csv, mimetype="text/csv", headers=csv_headers)
 
 
+@sitemap_include
 @main.route('/download/all', methods=['GET'])
 def all_data():
-    departments = Department.query.all()
+    departments = Department.query.filter(Department.officers.any())
     return render_template('all_depts.html', departments=departments)
 
 
@@ -989,11 +1094,13 @@ def upload(department_id, officer_id=None):
         return jsonify(error="Server error encountered. Try again later."), 500
 
 
+@sitemap_include
 @main.route('/about')
 def about_oo():
     return render_template('about.html')
 
 
+@sitemap_include
 @main.route('/privacy')
 def privacy_oo():
     return render_template('privacy.html')
@@ -1154,6 +1261,12 @@ main.add_url_rule(
     '/incidents/<int:obj_id>/revert',
     view_func=incident_view,
     methods=['GET', 'POST'])
+
+
+@sitemap.register_generator
+def sitemap_incidents():
+    for incident in Incident.query.all():
+        yield 'main.incident_api', {'obj_id': incident.id}
 
 
 class TextApi(ModelView):

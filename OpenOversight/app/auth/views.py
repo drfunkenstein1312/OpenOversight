@@ -5,6 +5,7 @@ from flask.views import MethodView
 from flask_login import login_user, logout_user, login_required, \
     current_user
 from . import auth
+from .. import sitemap
 from ..models import User, db
 from ..email import send_email
 from .forms import LoginForm, RegistrationForm, ChangePasswordForm,\
@@ -13,11 +14,25 @@ from .forms import LoginForm, RegistrationForm, ChangePasswordForm,\
 from .utils import admin_required
 from ..utils import set_dynamic_default
 
+sitemap_endpoints = []
+
+
+def sitemap_include(view):
+    sitemap_endpoints.append(view.__name__)
+    return view
+
+
+@sitemap.register_generator
+def static_routes():
+    for endpoint in sitemap_endpoints:
+        yield 'auth.' + endpoint, {}
+
 
 @auth.before_app_request
 def before_request():
     if current_user.is_authenticated \
             and not current_user.confirmed \
+            and request.endpoint \
             and request.endpoint[:5] != 'auth.' \
             and request.endpoint != 'static':
         return redirect(url_for('auth.unconfirmed'))
@@ -33,6 +48,7 @@ def unconfirmed():
         return render_template('auth/unconfirmed.html')
 
 
+@sitemap_include
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -42,6 +58,8 @@ def login():
             login_user(user, form.remember_me.data)
             return redirect(request.args.get('next') or url_for('main.index'))
         flash('Invalid username or password.')
+    else:
+        current_app.logger.info(form.errors)
     return render_template('auth/login.html', form=form)
 
 
@@ -53,6 +71,7 @@ def logout():
     return redirect(url_for('main.index'))
 
 
+@sitemap_include
 @auth.route('/register', methods=['GET', 'POST'])
 def register():
     jsloads = ['js/zxcvbn.js', 'js/password.js']
@@ -77,6 +96,8 @@ def register():
                        'auth/email/confirm', user=user, token=token)
             flash('A confirmation email has been sent to you.')
         return redirect(url_for('auth.login'))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('auth/register.html', form=form, jsloads=jsloads)
 
 
@@ -121,6 +142,8 @@ def change_password():
             return redirect(url_for('main.index'))
         else:
             flash('Invalid password.')
+    else:
+        current_app.logger.info(form.errors)
     return render_template("auth/change_password.html", form=form, jsloads=jsloads)
 
 
@@ -140,6 +163,8 @@ def password_reset_request():
         flash('An email with instructions to reset your password has been '
               'sent to you.')
         return redirect(url_for('auth.login'))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('auth/reset_password.html', form=form)
 
 
@@ -157,6 +182,8 @@ def password_reset(token):
             return redirect(url_for('auth.login'))
         else:
             return redirect(url_for('main.index'))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('auth/reset_password.html', form=form)
 
 
@@ -176,6 +203,8 @@ def change_email_request():
             return redirect(url_for('main.index'))
         else:
             flash('Invalid email or password.')
+    else:
+        current_app.logger.info(form.errors)
     return render_template("auth/change_email.html", form=form)
 
 
@@ -204,6 +233,8 @@ def change_dept():
         db.session.commit()
         flash('Updated!')
         return redirect(url_for('main.index'))
+    else:
+        current_app.logger.info(form.errors)
     return render_template('auth/change_dept_pref.html', form=form)
 
 

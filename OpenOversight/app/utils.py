@@ -1,3 +1,5 @@
+from typing import Optional
+
 from future.utils import iteritems
 from urllib.request import urlopen
 
@@ -69,10 +71,13 @@ def get_or_create(session, model, defaults=None, **kwargs):
         params.update(defaults or {})
         instance = model(**params)
         session.add(instance)
+        session.flush()
         return instance, True
 
 
-def unit_choices():
+def unit_choices(department_id: Optional[int] = None):
+    if department_id is not None:
+        return db.session.query(Unit).filter_by(department_id=department_id).all()
     return db.session.query(Unit).all()
 
 
@@ -290,7 +295,8 @@ def filter_by_form(form, officer_query, department_id=None):
         Assignment.officer_id,
         Assignment.job_id,
         Assignment.star_date,
-        Assignment.star_no
+        Assignment.star_no,
+        Assignment.unit_id
     ).add_columns(row_num_col).from_self().filter(row_num_col == 1).subquery()
     officer_query = officer_query.outerjoin(subq)
 
@@ -307,6 +313,11 @@ def filter_by_form(form, officer_query, department_id=None):
         officer_query = officer_query.filter(
             subq.c.assignments_star_no.like('%%{}%%'.format(form['badge']))
         )
+    if form.get('unit'):
+        officer_query = officer_query.filter(
+            subq.c.assignments_unit_id == form['unit']
+        )
+
     if form.get('unique_internal_identifier'):
         officer_query = officer_query.filter(
             Officer.unique_internal_identifier.ilike('%%{}%%'.format(form['unique_internal_identifier']))
@@ -570,11 +581,18 @@ def find_date_taken(pimage):
 
 
 def get_officer(department_id, star_no, first_name, last_name):
-    """Returns first officer with the given name and badge combo in the department, if they exist"""
+    """
+    Returns first officer with the given name and badge combo in the department, if they exist
+
+    If star_no is None, just return the first officer with the given first and last name.
+    """
     officers = Officer.query.filter_by(department_id=department_id,
                                        first_name=first_name,
                                        last_name=last_name).all()
-    if officers:
+
+    if star_no is None:
+        return officers[0]
+    else:
         star_no = str(star_no)
         for assignment in Assignment.query.filter_by(star_no=star_no).all():
             if assignment.baseofficer in officers:
@@ -591,3 +609,7 @@ def merge_dicts(*dict_args):
     for dictionary in dict_args:
         result.update(dictionary)
     return result
+
+
+def str_is_true(str_):
+    return str_.lower() in ['true', 't', 'yes', 'y']
